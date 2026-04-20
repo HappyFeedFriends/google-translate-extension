@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="ru">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Selection Translator Settings</title>
+    <link rel="stylesheet" href="options.css">
+  </head>
+  <body>
+    <main class="settings">
+      <section class="settings__card">
+        <p class="settings__eyebrow">Selection Translator</p>
+        <h1>Настройки перевода</h1>
+        <p class="settings__lead">
+          Укажите язык, на который нужно переводить выделенный текст на странице.
+        </p>
+
+        <label class="settings__field">
+          <span>Целевой язык</span>
+          <select id="targetLanguage">
+            <option value="ru">Русский</option>
+            <option value="en">English</option>
+            <option value="de">Deutsch</option>
+            <option value="fr">Francais</option>
+            <option value="es">Espanol</option>
+            <option value="it">Italiano</option>
+            <option value="tr">Turkce</option>
+            <option value="kk">Kazakh</option>
+            <option value="uz">Uzbek</option>
+            <option value="zh-CN">Chinese (Simplified)</option>
+            <option value="ja">Japanese</option>
+          </select>
+        </label>
+
+        <button id="saveButton" class="settings__button" type="button">Сохранить</button>
+        <p id="status" class="settings__status"></p>
+      </section>
+    </main>
+
+    <script src="options.js"></script>
+  </body>
+</html>

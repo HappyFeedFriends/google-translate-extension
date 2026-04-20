@@ -1,0 +1,31 @@
+{
+  "manifest_version": 3,
+  "name": "Selection Translator",
+  "version": "1.0.0",
+  "description": "Translates selected text on the page in a floating popup.",
+  "permissions": [
+    "storage"
+  ],
+  "host_permissions": [
+    "https://translate.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "content.js"
+      ],
+      "css": [
+        "content.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ]
+}

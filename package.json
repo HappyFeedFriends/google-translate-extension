@@ -1,0 +1,9 @@
+{
+  "name": "selection-translator-extension",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Chromium extension for translating selected text on a page.",
+  "scripts": {
+    "check": "node --check background.js && node --check content.js && node --check options.js"
+  }
+}
