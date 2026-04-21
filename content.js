@@ -1,18 +1,21 @@
 const MIN_TEXT_LENGTH = 1;
 const MAX_TEXT_LENGTH = 800;
-const POPUP_GAP = 10;
+const TRIGGER_OFFSET = 12;
+const PANEL_OFFSET = 14;
 
 const state = {
   selectedText: "",
-  anchorRect: null,
+  selectionRect: null,
   targetLanguage: "ru",
-  isPointerInsidePopup: false,
+  requestId: 0,
   hideTimer: null,
-  requestId: 0
+  isPointerInsideUi: false
 };
 
-const popup = createPopup();
-document.documentElement.appendChild(popup.root);
+const quickAction = createQuickAction();
+const panel = createPanel();
+
+document.documentElement.append(quickAction.root, panel.root);
 
 init();
 
@@ -22,34 +25,147 @@ async function init() {
   chrome.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === "sync" && changes.targetLanguage?.newValue) {
       state.targetLanguage = changes.targetLanguage.newValue;
-      popup.language.textContent = state.targetLanguage.toUpperCase();
+      panel.language.textContent = state.targetLanguage.toUpperCase();
     }
   });
 
-  document.addEventListener("mouseup", handleSelectionChange, true);
-  document.addEventListener("keyup", handleSelectionChange, true);
-  document.addEventListener("selectionchange", handleSelectionChange, true);
-  document.addEventListener("scroll", handleViewportChange, true);
-  window.addEventListener("resize", handleViewportChange, true);
-
-  document.addEventListener("mousedown", (event) => {
-    if (popup.root.contains(event.target)) {
-      return;
+  chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
+    if (message?.type === "OPEN_TRANSLATION_PANEL") {
+      openFromText(message.text || "");
+      sendResponse({ ok: true });
+      return true;
     }
 
-    clearHideTimer();
-    hidePopup();
-  }, true);
+    if (message?.type === "HIDE_TRANSLATION_PANEL") {
+      hideAllUi();
+      sendResponse({ ok: true });
+      return true;
+    }
+
+    return false;
+  });
+
+  document.addEventListener("mouseup", scheduleSelectionSync, true);
+  document.addEventListener("keyup", scheduleSelectionSync, true);
+  document.addEventListener("selectionchange", scheduleSelectionSync, true);
+  document.addEventListener("mousedown", handlePointerDown, true);
+  document.addEventListener("scroll", handleViewportChange, true);
+  window.addEventListener("resize", handleViewportChange, true);
 }
 
 async function loadSettings() {
   const { targetLanguage = "ru" } = await chrome.storage.sync.get("targetLanguage");
   state.targetLanguage = targetLanguage;
-  popup.language.textContent = state.targetLanguage.toUpperCase();
+  panel.language.textContent = state.targetLanguage.toUpperCase();
 }
 
-function handleSelectionChange() {
-  window.clearTimeout(state.hideTimer);
+function createQuickAction() {
+  const root = document.createElement("button");
+  root.className = "selection-translator-trigger";
+  root.type = "button";
+  root.hidden = true;
+  root.setAttribute("aria-label", "Открыть перевод");
+  root.innerHTML = `<span class="selection-translator-trigger__icon">文A</span>`;
+  root.addEventListener("click", () => {
+    if (!state.selectedText) {
+      return;
+    }
+
+    openPanel();
+  });
+
+  bindUiHoverState(root);
+
+  return { root };
+}
+
+function createPanel() {
+  const root = document.createElement("div");
+  root.className = "selection-translator-panel";
+  root.hidden = true;
+
+  const card = document.createElement("div");
+  card.className = "selection-translator-panel__card";
+
+  const header = document.createElement("div");
+  header.className = "selection-translator-panel__header";
+
+  const heading = document.createElement("div");
+  heading.className = "selection-translator-panel__heading";
+
+  const badge = document.createElement("span");
+  badge.className = "selection-translator-panel__badge";
+  badge.textContent = "Перевод";
+
+  const language = document.createElement("span");
+  language.className = "selection-translator-panel__language";
+
+  heading.append(badge, language);
+
+  const closeButton = document.createElement("button");
+  closeButton.className = "selection-translator-panel__icon-button";
+  closeButton.type = "button";
+  closeButton.textContent = "Закрыть";
+  closeButton.addEventListener("click", hideAllUi);
+
+  header.append(heading, closeButton);
+
+  const original = document.createElement("div");
+  original.className = "selection-translator-panel__original";
+
+  const status = document.createElement("div");
+  status.className = "selection-translator-panel__status";
+
+  const translation = document.createElement("div");
+  translation.className = "selection-translator-panel__translation";
+
+  const actions = document.createElement("div");
+  actions.className = "selection-translator-panel__actions";
+
+  const copyButton = document.createElement("button");
+  copyButton.className = "selection-translator-panel__button selection-translator-panel__button--secondary";
+  copyButton.type = "button";
+  copyButton.textContent = "Копировать";
+  copyButton.addEventListener("click", copyTranslation);
+
+  actions.append(copyButton);
+  card.append(header, original, status, translation, actions);
+  root.appendChild(card);
+
+  bindUiHoverState(root);
+
+  return {
+    root,
+    language,
+    original,
+    status,
+    translation,
+    copyButton
+  };
+}
+
+function bindUiHoverState(element) {
+  element.addEventListener("mouseenter", () => {
+    state.isPointerInsideUi = true;
+    clearHideTimer();
+  });
+
+  element.addEventListener("mouseleave", () => {
+    state.isPointerInsideUi = false;
+    scheduleHideIfNeeded();
+  });
+}
+
+function handlePointerDown(event) {
+  if (quickAction.root.contains(event.target) || panel.root.contains(event.target)) {
+    return;
+  }
+
+  scheduleHideIfNeeded(true);
+}
+
+function scheduleSelectionSync() {
+  clearHideTimer();
   state.hideTimer = window.setTimeout(syncSelectionState, 20);
 }
 
@@ -61,10 +177,10 @@ function syncSelectionState() {
     return;
   }
 
-  const text = selection.toString().replace(/\s+/g, " ").trim();
+  const normalizedText = selection.toString().replace(/\s+/g, " ").trim();
 
-  if (text.length < MIN_TEXT_LENGTH || text.length > MAX_TEXT_LENGTH) {
-    hidePopup();
+  if (normalizedText.length < MIN_TEXT_LENGTH || normalizedText.length > MAX_TEXT_LENGTH) {
+    hideAllUi();
     return;
   }
 
@@ -72,26 +188,17 @@ function syncSelectionState() {
   const rect = getAnchorRect(range);
 
   if (!rect) {
-    hidePopup();
+    hideAllUi();
     return;
   }
 
-  state.selectedText = text;
-  state.anchorRect = rect;
-  popup.original.textContent = text;
-  popup.language.textContent = state.targetLanguage.toUpperCase();
-  popup.translation.textContent = "";
-  popup.status.textContent = "Переводим...";
-  popup.translateButton.disabled = false;
-  popup.spinner.hidden = true;
+  state.selectedText = normalizedText;
+  state.selectionRect = rect;
 
-  showPopup();
-  requestTranslation();
-}
-
-function handleViewportChange() {
-  if (!popup.root.hidden && state.anchorRect) {
-    positionPopup();
+  if (panel.root.hidden) {
+    showQuickAction();
+  } else {
+    positionPanel();
   }
 }
 
@@ -102,81 +209,93 @@ function getAnchorRect(range) {
     return rects[rects.length - 1];
   }
 
-  const boundingRect = range.getBoundingClientRect();
-  return boundingRect.width || boundingRect.height ? boundingRect : null;
+  const rect = range.getBoundingClientRect();
+  return rect.width || rect.height ? rect : null;
 }
 
-function createPopup() {
-  const root = document.createElement("div");
-  root.className = "selection-translator";
-  root.hidden = true;
+function showQuickAction() {
+  quickAction.root.hidden = false;
+  positionQuickAction();
+}
 
-  const card = document.createElement("div");
-  card.className = "selection-translator__card";
+function positionQuickAction() {
+  if (!state.selectionRect) {
+    return;
+  }
 
-  const header = document.createElement("div");
-  header.className = "selection-translator__header";
+  const rect = state.selectionRect;
+  const root = quickAction.root;
 
-  const badge = document.createElement("span");
-  badge.className = "selection-translator__badge";
-  badge.textContent = "Перевод";
+  root.style.left = "0px";
+  root.style.top = "0px";
 
-  const language = document.createElement("span");
-  language.className = "selection-translator__language";
+  const bubbleRect = root.getBoundingClientRect();
+  const left = rect.left + window.scrollX + rect.width / 2 - bubbleRect.width / 2;
+  const top = rect.bottom + window.scrollY + TRIGGER_OFFSET;
 
-  header.append(badge, language);
+  root.style.left = `${clampToViewportX(left, bubbleRect.width)}px`;
+  root.style.top = `${clampToViewportY(top, bubbleRect.height)}px`;
+}
 
-  const original = document.createElement("div");
-  original.className = "selection-translator__original";
+function openFromText(text) {
+  const normalizedText = text.replace(/\s+/g, " ").trim();
 
-  const status = document.createElement("div");
-  status.className = "selection-translator__status";
+  if (normalizedText.length < MIN_TEXT_LENGTH || normalizedText.length > MAX_TEXT_LENGTH) {
+    hideAllUi();
+    return;
+  }
 
-  const translation = document.createElement("div");
-  translation.className = "selection-translator__translation";
+  state.selectedText = normalizedText;
 
-  const actions = document.createElement("div");
-  actions.className = "selection-translator__actions";
+  const selection = window.getSelection();
+  if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+    state.selectionRect = getAnchorRect(selection.getRangeAt(0));
+  }
 
-  const translateButton = document.createElement("button");
-  translateButton.className = "selection-translator__button";
-  translateButton.type = "button";
-  translateButton.textContent = "Перевести";
-  translateButton.addEventListener("click", requestTranslation);
+  openPanel();
+}
 
-  const copyButton = document.createElement("button");
-  copyButton.className = "selection-translator__button selection-translator__button--secondary";
-  copyButton.type = "button";
-  copyButton.textContent = "Копировать";
-  copyButton.addEventListener("click", copyTranslation);
+function openPanel() {
+  if (!state.selectedText) {
+    return;
+  }
 
-  const spinner = document.createElement("div");
-  spinner.className = "selection-translator__spinner";
-  spinner.hidden = true;
+  panel.original.textContent = state.selectedText;
+  panel.translation.textContent = "";
+  panel.status.textContent = "Переводим...";
+  panel.language.textContent = state.targetLanguage.toUpperCase();
+  panel.copyButton.disabled = true;
+  panel.root.hidden = false;
+  quickAction.root.hidden = true;
+  positionPanel();
+  requestTranslation();
+}
 
-  actions.append(translateButton, copyButton, spinner);
-  card.append(header, original, status, translation, actions);
-  root.appendChild(card);
+function positionPanel() {
+  const root = panel.root;
 
-  root.addEventListener("mouseenter", () => {
-    state.isPointerInsidePopup = true;
-    clearHideTimer();
-  });
+  root.style.left = "0px";
+  root.style.top = "0px";
 
-  root.addEventListener("mouseleave", () => {
-    state.isPointerInsidePopup = false;
-    scheduleHideIfNeeded();
-  });
+  const panelRect = root.getBoundingClientRect();
+  const selectionRect = state.selectionRect;
 
-  return {
-    root,
-    language,
-    original,
-    status,
-    translation,
-    translateButton,
-    spinner
-  };
+  if (!selectionRect) {
+    const fallbackLeft = window.scrollX + window.innerWidth / 2 - panelRect.width / 2;
+    const fallbackTop = window.scrollY + window.innerHeight - panelRect.height - 24;
+    root.style.left = `${clampToViewportX(fallbackLeft, panelRect.width)}px`;
+    root.style.top = `${clampToViewportY(fallbackTop, panelRect.height)}px`;
+    return;
+  }
+
+  const desiredLeft = selectionRect.left + window.scrollX + selectionRect.width / 2 - panelRect.width / 2;
+  const showAbove = selectionRect.top >= panelRect.height + PANEL_OFFSET + 8;
+  const desiredTop = showAbove
+    ? selectionRect.top + window.scrollY - panelRect.height - PANEL_OFFSET
+    : selectionRect.bottom + window.scrollY + PANEL_OFFSET + 48;
+
+  root.style.left = `${clampToViewportX(desiredLeft, panelRect.width)}px`;
+  root.style.top = `${clampToViewportY(desiredTop, panelRect.height)}px`;
 }
 
 async function requestTranslation() {
@@ -185,9 +304,8 @@ async function requestTranslation() {
   }
 
   const requestId = ++state.requestId;
-  popup.translateButton.disabled = true;
-  popup.spinner.hidden = false;
-  popup.status.textContent = "Переводим...";
+  panel.copyButton.disabled = true;
+  panel.status.textContent = "Переводим...";
 
   try {
     const response = await chrome.runtime.sendMessage({
@@ -204,62 +322,59 @@ async function requestTranslation() {
       return;
     }
 
-    popup.translation.textContent = response.translation;
-    popup.status.textContent = `Определён язык: ${response.detectedLanguage}`;
+    panel.translation.textContent = response.translation;
+    panel.status.textContent = `Определён язык: ${response.detectedLanguage}`;
   } catch (error) {
     if (requestId !== state.requestId) {
       return;
     }
 
-    popup.translation.textContent = "";
-    popup.status.textContent = error instanceof Error ? error.message : "Ошибка перевода";
+    panel.translation.textContent = "";
+    panel.status.textContent = error instanceof Error ? error.message : "Ошибка перевода";
   } finally {
     if (requestId === state.requestId) {
-      popup.translateButton.disabled = false;
-      popup.spinner.hidden = true;
+      panel.copyButton.disabled = false;
     }
   }
 }
 
 async function copyTranslation() {
-  const text = popup.translation.textContent.trim();
+  const text = panel.translation.textContent.trim();
 
   if (!text) {
-    popup.status.textContent = "Сначала получите перевод";
+    panel.status.textContent = "Сначала получите перевод";
     return;
   }
 
   try {
     await navigator.clipboard.writeText(text);
-    popup.status.textContent = "Перевод скопирован";
+    panel.status.textContent = "Перевод скопирован";
   } catch (_error) {
-    popup.status.textContent = "Не удалось скопировать";
+    panel.status.textContent = "Не удалось скопировать";
   }
 }
 
-function showPopup() {
-  popup.root.hidden = false;
-  positionPopup();
+function handleViewportChange() {
+  if (!quickAction.root.hidden) {
+    positionQuickAction();
+  }
+
+  if (!panel.root.hidden) {
+    positionPanel();
+  }
 }
 
-function hidePopup() {
-  state.selectedText = "";
-  state.anchorRect = null;
-  state.requestId += 1;
-  popup.root.hidden = true;
-}
-
-function scheduleHideIfNeeded() {
+function scheduleHideIfNeeded(force = false) {
   clearHideTimer();
 
   state.hideTimer = window.setTimeout(() => {
     const selection = window.getSelection();
     const hasSelection = selection && !selection.isCollapsed && selection.toString().trim();
 
-    if (!hasSelection && !state.isPointerInsidePopup) {
-      hidePopup();
+    if (force || (!hasSelection && !state.isPointerInsideUi)) {
+      hideAllUi();
     }
-  }, 160);
+  }, force ? 0 : 160);
 }
 
 function clearHideTimer() {
@@ -269,33 +384,22 @@ function clearHideTimer() {
   }
 }
 
-function positionPopup() {
-  if (!state.anchorRect) {
-    return;
-  }
+function hideAllUi() {
+  state.selectedText = "";
+  state.selectionRect = null;
+  state.requestId += 1;
+  quickAction.root.hidden = true;
+  panel.root.hidden = true;
+}
 
-  const root = popup.root;
-  const { innerWidth, innerHeight } = window;
-  const rect = state.anchorRect;
+function clampToViewportX(left, width) {
+  const min = window.scrollX + 8;
+  const max = window.scrollX + window.innerWidth - width - 8;
+  return Math.min(Math.max(left, min), Math.max(min, max));
+}
 
-  root.style.left = "0px";
-  root.style.top = "0px";
-
-  const popupRect = root.getBoundingClientRect();
-  const desiredLeft = rect.left + window.scrollX + rect.width / 2 - popupRect.width / 2;
-  const placeAbove = rect.top >= popupRect.height + POPUP_GAP;
-  const desiredTop = placeAbove
-    ? rect.top + window.scrollY - popupRect.height - POPUP_GAP
-    : rect.bottom + window.scrollY + POPUP_GAP;
-
-  const minLeft = window.scrollX + 8;
-  const maxLeft = window.scrollX + innerWidth - popupRect.width - 8;
-  const left = Math.min(Math.max(desiredLeft, minLeft), Math.max(minLeft, maxLeft));
-
-  const minTop = window.scrollY + 8;
-  const maxTop = window.scrollY + innerHeight - popupRect.height - 8;
-  const top = Math.min(Math.max(desiredTop, minTop), Math.max(minTop, maxTop));
-
-  root.style.left = `${left}px`;
-  root.style.top = `${top}px`;
+function clampToViewportY(top, height) {
+  const min = window.scrollY + 8;
+  const max = window.scrollY + window.innerHeight - height - 8;
+  return Math.min(Math.max(top, min), Math.max(min, max));
 }

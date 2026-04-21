@@ -4,7 +4,8 @@
   "version": "1.0.0",
   "description": "Translates selected text on the page in a floating popup.",
   "permissions": [
-    "storage"
+    "storage",
+    "contextMenus"
   ],
   "host_permissions": [
     "https://translate.googleapis.com/*"

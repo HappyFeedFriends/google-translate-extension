@@ -1,4 +1,5 @@
 const DEFAULT_TARGET_LANGUAGE = "ru";
+const MENU_ID = "selection-translator-context";
 
 chrome.runtime.onInstalled.addListener(async () => {
   const { targetLanguage } = await chrome.storage.sync.get("targetLanguage");
@@ -23,6 +24,27 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     });
 
   return true;
+});
+
+chrome.contextMenus.onClicked.addListener(async (info, tab) => {
+  if (info.menuItemId !== MENU_ID || !tab?.id) {
+    return;
+  }
+
+  const selectedText = (info.selectionText || "").trim();
+
+  if (!selectedText) {
+    return;
+  }
+
+  try {
+    await chrome.tabs.sendMessage(tab.id, {
+      type: "OPEN_TRANSLATION_PANEL",
+      text: selectedText
+    });
+  } catch (_error) {
+    // Ignore pages where content scripts are not available.
+  }
 });
 
 async function translateSelection(text, targetLanguage = DEFAULT_TARGET_LANGUAGE) {
