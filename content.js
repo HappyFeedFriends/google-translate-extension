@@ -133,10 +133,7 @@ function createPanel() {
   language.type = "button";
   language.addEventListener("click", toggleLanguageMenu);
 
-  const statusDot = document.createElement("span");
-  statusDot.className = "selection-translator-panel__status-dot";
-
-  meta.append(badge, language, statusDot);
+  meta.append(badge, language);
 
   heading.append(meta);
   header.append(heading);
