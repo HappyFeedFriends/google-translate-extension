@@ -6,10 +6,11 @@ body {
   margin: 0;
   min-height: 100vh;
   background:
-    radial-gradient(circle at top left, rgba(20, 71, 230, 0.18), transparent 32%),
-    linear-gradient(180deg, #f4f7fb 0%, #e8eef8 100%);
-  color: #101828;
-  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.18), transparent 24%),
+    radial-gradient(circle at top left, rgba(149, 114, 94, 0.18), transparent 34%),
+    linear-gradient(180deg, #1f1f22 0%, #2b2b2f 56%, #3d3d43 100%);
+  color: #f5f2ee;
+  font: 16px/1.5 "SF Pro Display", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 }
 
 .settings {
@@ -21,17 +22,21 @@ body {
 
 .settings__card {
   width: min(100%, 520px);
-  background: rgba(255, 255, 255, 0.88);
-  border: 1px solid rgba(16, 24, 40, 0.1);
-  border-radius: 24px;
-  box-shadow: 0 24px 60px rgba(15, 23, 42, 0.12);
+  background:
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.14), transparent 26%),
+    linear-gradient(180deg, rgba(82, 82, 88, 0.92) 0%, rgba(58, 58, 63, 0.94) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 28px;
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.16),
+    0 28px 70px rgba(0, 0, 0, 0.38);
   padding: 28px;
-  backdrop-filter: blur(10px);
+  backdrop-filter: blur(16px);
 }
 
 .settings__eyebrow {
   margin: 0 0 6px;
-  color: #1447e6;
+  color: rgba(245, 242, 238, 0.68);
   font-size: 12px;
   font-weight: 800;
   letter-spacing: 0.12em;
@@ -46,7 +51,7 @@ body {
 
 .settings__lead {
   margin: 0 0 22px;
-  color: #475467;
+  color: rgba(245, 242, 238, 0.72);
 }
 
 .settings__field {
@@ -61,19 +66,21 @@ body {
 
 .settings__field select {
   appearance: none;
-  border: 1px solid #d0d5dd;
-  border-radius: 14px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 16px;
   padding: 12px 14px;
-  background: #ffffff;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fffaf5;
   font: inherit;
+  backdrop-filter: blur(10px);
 }
 
 .settings__button {
   appearance: none;
   border: 0;
-  border-radius: 14px;
-  background: #1447e6;
-  color: #ffffff;
+  border-radius: 16px;
+  background: linear-gradient(180deg, #faf7f2 0%, #e9e1d9 100%);
+  color: #2a2827;
   padding: 12px 18px;
   font: inherit;
   font-weight: 700;
@@ -81,11 +88,94 @@ body {
 }
 
 .settings__button:hover {
-  background: #1139b7;
+  filter: brightness(0.98);
 }
 
 .settings__status {
   min-height: 24px;
   margin: 12px 0 0;
-  color: #475467;
+  color: rgba(245, 242, 238, 0.72);
+}
+
+.settings__preview {
+  margin: 6px 0 20px;
+}
+
+.settings__preview-card {
+  padding: 18px;
+  border-radius: 24px;
+}
+
+.settings__preview--dia .settings__preview-card {
+  background:
+    radial-gradient(circle at top center, rgba(255, 255, 255, 0.12), transparent 28%),
+    linear-gradient(180deg, rgba(74, 74, 78, 0.94) 0%, rgba(35, 35, 38, 0.96) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.12),
+    0 24px 60px rgba(0, 0, 0, 0.3);
+}
+
+.settings__preview-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.settings__preview-meta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.settings__preview-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fffaf5;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.settings__preview-lang,
+.settings__preview-status {
+  color: rgba(245, 242, 238, 0.72);
+  font-size: 12px;
+}
+
+.settings__preview-close {
+  display: inline-flex;
+  align-items: center;
+  padding: 8px 12px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.08);
+  color: #fffaf5;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.settings__preview-source,
+.settings__preview-result {
+  border-radius: 16px;
+  padding: 12px 14px;
+}
+
+.settings__preview-source {
+  margin-bottom: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  color: rgba(245, 242, 238, 0.76);
+}
+
+.settings__preview-status {
+  margin-bottom: 10px;
+}
+
+.settings__preview-result {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fffaf5;
+  font-weight: 600;
 }

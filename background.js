@@ -58,6 +58,7 @@ async function translateSelection(text, targetLanguage = DEFAULT_TARGET_LANGUAGE
 
   const response = await fetch(`https://translate.googleapis.com/translate_a/single?${query.toString()}`);
 
+
   if (!response.ok) {
     throw new Error(`Translation request failed with status ${response.status}`);
   }

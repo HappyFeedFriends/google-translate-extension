@@ -32,6 +32,29 @@
           </select>
         </label>
 
+        <label class="settings__field">
+          <span>Тема popup</span>
+          <select id="popupTheme">
+            <option value="classic">Classic</option>
+            <option value="dia">Dia</option>
+          </select>
+        </label>
+
+        <section class="settings__preview settings__preview--dia">
+          <div class="settings__preview-card">
+            <div class="settings__preview-top">
+              <div class="settings__preview-meta">
+                <span class="settings__preview-badge">Перевод</span>
+                <span class="settings__preview-lang">RU</span>
+              </div>
+              <span class="settings__preview-close">Close</span>
+            </div>
+            <div class="settings__preview-source">Highlighted source text appears here</div>
+            <div class="settings__preview-status">Определён язык: en</div>
+            <div class="settings__preview-result">Здесь появится перевод в стиле Dia.</div>
+          </div>
+        </section>
+
         <button id="saveButton" class="settings__button" type="button">Сохранить</button>
         <p id="status" class="settings__status"></p>
       </section>

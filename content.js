@@ -2,11 +2,14 @@ const MIN_TEXT_LENGTH = 1;
 const MAX_TEXT_LENGTH = 800;
 const TRIGGER_OFFSET = 12;
 const PANEL_OFFSET = 14;
+const DEFAULT_THEME = "classic";
 
 const state = {
   selectedText: "",
   selectionRect: null,
+  panelAnchorRect: null,
   targetLanguage: "ru",
+  popupTheme: DEFAULT_THEME,
   requestId: 0,
   hideTimer: null,
   isPointerInsideUi: false
@@ -23,9 +26,17 @@ async function init() {
   await loadSettings();
 
   chrome.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === "sync" && changes.targetLanguage?.newValue) {
+    if (areaName !== "sync") {
+      return;
+    }
+
+    if (changes.targetLanguage?.newValue) {
       state.targetLanguage = changes.targetLanguage.newValue;
       panel.language.textContent = state.targetLanguage.toUpperCase();
+    }
+
+    if (changes.popupTheme?.newValue) {
+      applyTheme(changes.popupTheme.newValue);
     }
   });
 
@@ -54,9 +65,13 @@ async function init() {
 }
 
 async function loadSettings() {
-  const { targetLanguage = "ru" } = await chrome.storage.sync.get("targetLanguage");
+  const {
+    targetLanguage = "ru",
+    popupTheme = DEFAULT_THEME
+  } = await chrome.storage.sync.get(["targetLanguage", "popupTheme"]);
   state.targetLanguage = targetLanguage;
   panel.language.textContent = state.targetLanguage.toUpperCase();
+  applyTheme(popupTheme);
 }
 
 function createQuickAction() {
@@ -90,6 +105,9 @@ function createPanel() {
   const header = document.createElement("div");
   header.className = "selection-translator-panel__header";
 
+  const meta = document.createElement("div");
+  meta.className = "selection-translator-panel__meta";
+
   const heading = document.createElement("div");
   heading.className = "selection-translator-panel__heading";
 
@@ -100,14 +118,18 @@ function createPanel() {
   const language = document.createElement("span");
   language.className = "selection-translator-panel__language";
 
-  heading.append(badge, language);
+  const statusDot = document.createElement("span");
+  statusDot.className = "selection-translator-panel__status-dot";
+
+  meta.append(badge, language, statusDot);
 
   const closeButton = document.createElement("button");
   closeButton.className = "selection-translator-panel__icon-button";
   closeButton.type = "button";
-  closeButton.textContent = "Закрыть";
+  closeButton.textContent = "Close";
   closeButton.addEventListener("click", hideAllUi);
 
+  heading.append(meta);
   header.append(heading, closeButton);
 
   const original = document.createElement("div");
@@ -173,6 +195,10 @@ function syncSelectionState() {
   const selection = window.getSelection();
 
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    if (!panel.root.hidden) {
+      return;
+    }
+
     scheduleHideIfNeeded();
     return;
   }
@@ -195,10 +221,10 @@ function syncSelectionState() {
   state.selectedText = normalizedText;
   state.selectionRect = rect;
 
-  if (panel.root.hidden) {
-    showQuickAction();
-  } else {
-    positionPanel();
+  showQuickAction();
+
+  if (!panel.root.hidden) {
+    panel.root.hidden = true;
   }
 }
 
@@ -260,6 +286,7 @@ function openPanel() {
     return;
   }
 
+  state.panelAnchorRect = cloneRect(state.selectionRect) || state.panelAnchorRect;
   panel.original.textContent = state.selectedText;
   panel.translation.textContent = "";
   panel.status.textContent = "Переводим...";
@@ -278,7 +305,7 @@ function positionPanel() {
   root.style.top = "0px";
 
   const panelRect = root.getBoundingClientRect();
-  const selectionRect = state.selectionRect;
+  const selectionRect = state.panelAnchorRect;
 
   if (!selectionRect) {
     const fallbackLeft = window.scrollX + window.innerWidth / 2 - panelRect.width / 2;
@@ -371,6 +398,10 @@ function scheduleHideIfNeeded(force = false) {
     const selection = window.getSelection();
     const hasSelection = selection && !selection.isCollapsed && selection.toString().trim();
 
+    if (!panel.root.hidden && !force) {
+      return;
+    }
+
     if (force || (!hasSelection && !state.isPointerInsideUi)) {
       hideAllUi();
     }
@@ -387,9 +418,32 @@ function clearHideTimer() {
 function hideAllUi() {
   state.selectedText = "";
   state.selectionRect = null;
+  state.panelAnchorRect = null;
   state.requestId += 1;
   quickAction.root.hidden = true;
   panel.root.hidden = true;
+}
+
+function applyTheme(theme) {
+  const normalizedTheme = theme === "dia" ? "dia" : DEFAULT_THEME;
+  state.popupTheme = normalizedTheme;
+  quickAction.root.dataset.theme = normalizedTheme;
+  panel.root.dataset.theme = normalizedTheme;
+}
+
+function cloneRect(rect) {
+  if (!rect) {
+    return null;
+  }
+
+  return {
+    top: rect.top,
+    right: rect.right,
+    bottom: rect.bottom,
+    left: rect.left,
+    width: rect.width,
+    height: rect.height
+  };
 }
 
 function clampToViewportX(left, width) {
