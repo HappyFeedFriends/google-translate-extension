@@ -130,7 +130,7 @@ function createPanel() {
   closeButton.addEventListener("click", hideAllUi);
 
   heading.append(meta);
-  header.append(heading, closeButton);
+  header.append(heading);
 
   const original = document.createElement("div");
   original.className = "selection-translator-panel__original";
