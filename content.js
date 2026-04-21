@@ -3,6 +3,19 @@ const MAX_TEXT_LENGTH = 800;
 const TRIGGER_OFFSET = 12;
 const PANEL_OFFSET = 14;
 const DEFAULT_THEME = "classic";
+const LANGUAGE_OPTIONS = [
+  { value: "ru", label: "Русский" },
+  { value: "en", label: "English" },
+  { value: "de", label: "Deutsch" },
+  { value: "fr", label: "Francais" },
+  { value: "es", label: "Espanol" },
+  { value: "it", label: "Italiano" },
+  { value: "tr", label: "Turkce" },
+  { value: "kk", label: "Kazakh" },
+  { value: "uz", label: "Uzbek" },
+  { value: "zh-CN", label: "Chinese (Simplified)" },
+  { value: "ja", label: "Japanese" }
+];
 
 const state = {
   selectedText: "",
@@ -12,7 +25,8 @@ const state = {
   popupTheme: DEFAULT_THEME,
   requestId: 0,
   hideTimer: null,
-  isPointerInsideUi: false
+  isPointerInsideUi: false,
+  isLanguageMenuOpen: false
 };
 
 const quickAction = createQuickAction();
@@ -115,22 +129,34 @@ function createPanel() {
   badge.className = "selection-translator-panel__badge";
   badge.textContent = "Перевод";
 
-  const language = document.createElement("span");
+  const language = document.createElement("button");
   language.className = "selection-translator-panel__language";
+  language.type = "button";
+  language.addEventListener("click", toggleLanguageMenu);
 
   const statusDot = document.createElement("span");
   statusDot.className = "selection-translator-panel__status-dot";
 
   meta.append(badge, language, statusDot);
 
-  const closeButton = document.createElement("button");
-  closeButton.className = "selection-translator-panel__icon-button";
-  closeButton.type = "button";
-  closeButton.textContent = "+";
-  closeButton.addEventListener("click", hideAllUi);
-
   heading.append(meta);
   header.append(heading);
+
+  const languageMenu = document.createElement("div");
+  languageMenu.className = "selection-translator-panel__language-menu";
+  languageMenu.hidden = true;
+
+  for (const option of LANGUAGE_OPTIONS) {
+    const item = document.createElement("button");
+    item.className = "selection-translator-panel__language-option";
+    item.type = "button";
+    item.textContent = option.label;
+    item.dataset.value = option.value;
+    item.addEventListener("click", () => {
+      selectTargetLanguage(option.value);
+    });
+    languageMenu.appendChild(item);
+  }
 
   const original = document.createElement("div");
   original.className = "selection-translator-panel__original";
@@ -152,13 +178,14 @@ function createPanel() {
 
   actions.append(copyButton);
   card.append(header, original, status, translation, actions);
-  root.appendChild(card);
+  root.append(card, languageMenu);
 
   bindUiHoverState(root);
 
   return {
     root,
     language,
+    languageMenu,
     original,
     status,
     translation,
@@ -179,10 +206,21 @@ function bindUiHoverState(element) {
 }
 
 function handlePointerDown(event) {
-  if (quickAction.root.contains(event.target) || panel.root.contains(event.target)) {
+  if (quickAction.root.contains(event.target)) {
     return;
   }
 
+  if (panel.root.contains(event.target)) {
+    const clickedInsideLanguageControls = panel.language.contains(event.target) || panel.languageMenu.contains(event.target);
+
+    if (!clickedInsideLanguageControls) {
+      closeLanguageMenu();
+    }
+
+    return;
+  }
+
+  closeLanguageMenu();
   scheduleHideIfNeeded(true);
 }
 
@@ -221,11 +259,11 @@ function syncSelectionState() {
   state.selectedText = normalizedText;
   state.selectionRect = rect;
 
-  showQuickAction();
-
   if (!panel.root.hidden) {
-    panel.root.hidden = true;
+    return;
   }
+
+  showQuickAction();
 }
 
 function getAnchorRect(range) {
@@ -291,6 +329,8 @@ function openPanel() {
   panel.translation.textContent = "";
   panel.status.textContent = "Переводим...";
   panel.language.textContent = state.targetLanguage.toUpperCase();
+  syncLanguageMenuSelection();
+  closeLanguageMenu();
   panel.copyButton.disabled = true;
   panel.root.hidden = false;
   quickAction.root.hidden = true;
@@ -323,6 +363,10 @@ function positionPanel() {
 
   root.style.left = `${clampToViewportX(desiredLeft, panelRect.width)}px`;
   root.style.top = `${clampToViewportY(desiredTop, panelRect.height)}px`;
+
+  if (state.isLanguageMenuOpen) {
+    positionLanguageMenu();
+  }
 }
 
 async function requestTranslation() {
@@ -420,6 +464,7 @@ function hideAllUi() {
   state.selectionRect = null;
   state.panelAnchorRect = null;
   state.requestId += 1;
+  closeLanguageMenu();
   quickAction.root.hidden = true;
   panel.root.hidden = true;
 }
@@ -429,6 +474,67 @@ function applyTheme(theme) {
   state.popupTheme = normalizedTheme;
   quickAction.root.dataset.theme = normalizedTheme;
   panel.root.dataset.theme = normalizedTheme;
+}
+
+function toggleLanguageMenu(event) {
+  event.stopPropagation();
+
+  if (state.isLanguageMenuOpen) {
+    closeLanguageMenu();
+    return;
+  }
+
+  syncLanguageMenuSelection();
+  panel.languageMenu.hidden = false;
+  state.isLanguageMenuOpen = true;
+  positionLanguageMenu();
+}
+
+function closeLanguageMenu() {
+  panel.languageMenu.hidden = true;
+  state.isLanguageMenuOpen = false;
+}
+
+function syncLanguageMenuSelection() {
+  const items = panel.languageMenu.querySelectorAll(".selection-translator-panel__language-option");
+
+  for (const item of items) {
+    item.dataset.active = item.dataset.value === state.targetLanguage ? "true" : "false";
+  }
+}
+
+async function selectTargetLanguage(value) {
+  if (value === state.targetLanguage) {
+    closeLanguageMenu();
+    return;
+  }
+
+  state.targetLanguage = value;
+  panel.language.textContent = state.targetLanguage.toUpperCase();
+  syncLanguageMenuSelection();
+  closeLanguageMenu();
+  await chrome.storage.sync.set({ targetLanguage: value });
+
+  if (!panel.root.hidden && state.selectedText) {
+    requestTranslation();
+  }
+}
+
+function positionLanguageMenu() {
+  panel.languageMenu.style.left = "0px";
+  panel.languageMenu.style.top = "0px";
+
+  const rootRect = panel.root.getBoundingClientRect();
+  const triggerRect = panel.language.getBoundingClientRect();
+  const menuRect = panel.languageMenu.getBoundingClientRect();
+
+  const desiredLeft = triggerRect.left - rootRect.left;
+  const desiredTop = triggerRect.bottom - rootRect.top + 8;
+  const maxLeft = Math.max(8, rootRect.width - menuRect.width - 8);
+  const left = Math.min(Math.max(desiredLeft, 8), maxLeft);
+
+  panel.languageMenu.style.left = `${left}px`;
+  panel.languageMenu.style.top = `${desiredTop}px`;
 }
 
 function cloneRect(rect) {

@@ -31,6 +31,7 @@
 }
 
 .selection-translator-panel {
+  position: absolute;
   width: min(420px, calc(100vw - 16px));
   color: #101828;
 }
@@ -76,11 +77,52 @@
 }
 
 .selection-translator-panel__language {
+  appearance: none;
+  border: 0;
+  background: transparent;
+  padding: 0;
   color: #475467;
   font-size: 12px;
   font-weight: 700;
   letter-spacing: 0.08em;
   text-transform: uppercase;
+  cursor: pointer;
+}
+
+.selection-translator-panel__language:hover {
+  color: #182230;
+}
+
+.selection-translator-panel__language-menu {
+  position: absolute;
+  z-index: 2;
+  display: grid;
+  gap: 4px;
+  padding: 8px;
+  border: 1px solid rgba(16, 24, 40, 0.1);
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.94);
+  box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
+  min-width: 180px;
+  backdrop-filter: blur(12px);
+}
+
+.selection-translator-panel__language-option {
+  appearance: none;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: #344054;
+  padding: 8px 10px;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.selection-translator-panel__language-option:hover,
+.selection-translator-panel__language-option[data-active="true"] {
+  background: #eef2ff;
+  color: #1447e6;
 }
 
 .selection-translator-panel__status-dot {
@@ -130,8 +172,10 @@
 
 .selection-translator-panel__translation {
   color: #101828;
-  font-size: 16px;
-  font-weight: 600;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+  line-height: 1.45;
   white-space: pre-wrap;
   margin-bottom: 12px;
   min-height: 22px;
@@ -221,6 +265,10 @@
   color: rgba(206, 198, 187, 0.66);
 }
 
+.selection-translator-panel[data-theme="dia"] .selection-translator-panel__language:hover {
+  color: rgba(240, 235, 227, 0.88);
+}
+
 .selection-translator-panel[data-theme="dia"] .selection-translator-panel__original {
   color: rgba(212, 205, 195, 0.92);
   background: transparent;
@@ -242,9 +290,10 @@
   border-radius: 0;
   padding: 12px 0 0;
   margin: 0;
-  font-size: 14px;
+  font-family: "Iowan Old Style", "Palatino Linotype", "Book Antiqua", Georgia, serif;
+  font-size: 18px;
   font-weight: 400;
-  line-height: 1.55;
+  line-height: 1.28;
   min-height: 0;
 }
 
@@ -297,4 +346,20 @@
   padding: 10px 0 0;
   font-size: 11px;
   letter-spacing: 0;
+}
+
+.selection-translator-panel[data-theme="dia"] .selection-translator-panel__language-menu {
+  border-color: rgba(255, 255, 255, 0.08);
+  background: rgba(39, 37, 35, 0.98);
+  box-shadow: 0 14px 28px rgba(0, 0, 0, 0.24);
+}
+
+.selection-translator-panel[data-theme="dia"] .selection-translator-panel__language-option {
+  color: rgba(224, 217, 206, 0.84);
+}
+
+.selection-translator-panel[data-theme="dia"] .selection-translator-panel__language-option:hover,
+.selection-translator-panel[data-theme="dia"] .selection-translator-panel__language-option[data-active="true"] {
+  background: rgba(255, 255, 255, 0.06);
+  color: #f3efe8;
 }
