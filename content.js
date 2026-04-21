@@ -1,5 +1,4 @@
 const MIN_TEXT_LENGTH = 1;
-const MAX_TEXT_LENGTH = 800;
 const TRIGGER_OFFSET = 12;
 const PANEL_OFFSET = 14;
 const DEFAULT_THEME = "classic";
@@ -184,6 +183,7 @@ function createPanel() {
 
   return {
     root,
+    card,
     language,
     languageMenu,
     original,
@@ -243,7 +243,7 @@ function syncSelectionState() {
 
   const normalizedText = selection.toString().replace(/\s+/g, " ").trim();
 
-  if (normalizedText.length < MIN_TEXT_LENGTH || normalizedText.length > MAX_TEXT_LENGTH) {
+  if (normalizedText.length < MIN_TEXT_LENGTH) {
     hideAllUi();
     return;
   }
@@ -304,7 +304,7 @@ function positionQuickAction() {
 function openFromText(text) {
   const normalizedText = text.replace(/\s+/g, " ").trim();
 
-  if (normalizedText.length < MIN_TEXT_LENGTH || normalizedText.length > MAX_TEXT_LENGTH) {
+  if (normalizedText.length < MIN_TEXT_LENGTH) {
     hideAllUi();
     return;
   }
@@ -335,31 +335,62 @@ function openPanel() {
   panel.root.hidden = false;
   quickAction.root.hidden = true;
   positionPanel();
+  window.requestAnimationFrame(() => {
+    if (!panel.root.hidden) {
+      positionPanel();
+    }
+  });
   requestTranslation();
 }
 
 function positionPanel() {
   const root = panel.root;
+  const viewportPadding = 8;
 
+  resetPanelSizeConstraints();
   root.style.left = "0px";
   root.style.top = "0px";
 
-  const panelRect = root.getBoundingClientRect();
   const selectionRect = state.panelAnchorRect;
 
   if (!selectionRect) {
-    const fallbackLeft = window.scrollX + window.innerWidth / 2 - panelRect.width / 2;
-    const fallbackTop = window.scrollY + window.innerHeight - panelRect.height - 24;
-    root.style.left = `${clampToViewportX(fallbackLeft, panelRect.width)}px`;
-    root.style.top = `${clampToViewportY(fallbackTop, panelRect.height)}px`;
+    const fallbackMaxHeight = window.innerHeight - 24 - viewportPadding * 2;
+    applyPanelSizeConstraints(fallbackMaxHeight);
+    const fallbackRect = root.getBoundingClientRect();
+    const fallbackLeft = window.scrollX + window.innerWidth / 2 - fallbackRect.width / 2;
+    const fallbackTop = window.scrollY + window.innerHeight - fallbackRect.height - 24;
+    root.style.left = `${clampToViewportX(fallbackLeft, fallbackRect.width)}px`;
+    root.style.top = `${clampToViewportY(fallbackTop, fallbackRect.height)}px`;
     return;
   }
 
+  let panelRect = root.getBoundingClientRect();
   const desiredLeft = selectionRect.left + window.scrollX + selectionRect.width / 2 - panelRect.width / 2;
-  const showAbove = selectionRect.top >= panelRect.height + PANEL_OFFSET + 8;
-  const desiredTop = showAbove
-    ? selectionRect.top + window.scrollY - panelRect.height - PANEL_OFFSET
-    : selectionRect.bottom + window.scrollY + PANEL_OFFSET + 48;
+  const spaceAbove = selectionRect.top - viewportPadding;
+  const spaceBelow = window.innerHeight - selectionRect.bottom - viewportPadding;
+  const fitsAbove = spaceAbove >= panelRect.height + PANEL_OFFSET;
+  const fitsBelow = spaceBelow >= panelRect.height + PANEL_OFFSET + 48;
+
+  let desiredTop;
+
+  if (fitsAbove || (!fitsBelow && spaceAbove > spaceBelow)) {
+    desiredTop = selectionRect.top + window.scrollY - panelRect.height - PANEL_OFFSET;
+  } else {
+    desiredTop = selectionRect.bottom + window.scrollY + PANEL_OFFSET + 48;
+  }
+
+  const availableHeight = fitsAbove || (!fitsBelow && spaceAbove > spaceBelow)
+    ? spaceAbove - PANEL_OFFSET
+    : spaceBelow - PANEL_OFFSET - 48;
+
+  applyPanelSizeConstraints(availableHeight);
+  panelRect = root.getBoundingClientRect();
+
+  if (fitsAbove || (!fitsBelow && spaceAbove > spaceBelow)) {
+    desiredTop = selectionRect.top + window.scrollY - panelRect.height - PANEL_OFFSET;
+  } else {
+    desiredTop = selectionRect.bottom + window.scrollY + PANEL_OFFSET + 48;
+  }
 
   root.style.left = `${clampToViewportX(desiredLeft, panelRect.width)}px`;
   root.style.top = `${clampToViewportY(desiredTop, panelRect.height)}px`;
@@ -395,6 +426,7 @@ async function requestTranslation() {
 
     panel.translation.textContent = response.translation;
     panel.status.textContent = `Определён язык: ${response.detectedLanguage}`;
+    positionPanel();
   } catch (error) {
     if (requestId !== state.requestId) {
       return;
@@ -402,6 +434,7 @@ async function requestTranslation() {
 
     panel.translation.textContent = "";
     panel.status.textContent = error instanceof Error ? error.message : "Ошибка перевода";
+    positionPanel();
   } finally {
     if (requestId === state.requestId) {
       panel.copyButton.disabled = false;
@@ -535,6 +568,44 @@ function positionLanguageMenu() {
 
   panel.languageMenu.style.left = `${left}px`;
   panel.languageMenu.style.top = `${desiredTop}px`;
+}
+
+function resetPanelSizeConstraints() {
+  panel.card.style.maxHeight = "";
+  panel.card.style.overflow = "";
+  panel.original.style.maxHeight = "";
+  panel.original.style.overflow = "";
+  panel.translation.style.maxHeight = "";
+  panel.translation.style.overflow = "";
+}
+
+function applyPanelSizeConstraints(availableHeight) {
+  const safeAvailableHeight = Math.max(240, Math.floor(availableHeight));
+  const naturalCardHeight = panel.card.scrollHeight;
+
+  if (naturalCardHeight <= safeAvailableHeight) {
+    return;
+  }
+
+  panel.card.style.maxHeight = `${safeAvailableHeight}px`;
+  panel.card.style.overflow = "hidden";
+
+  const originalNaturalHeight = panel.original.scrollHeight;
+  const translationNaturalHeight = panel.translation.scrollHeight;
+  const fixedHeight = panel.card.scrollHeight - originalNaturalHeight - translationNaturalHeight;
+  const availableScrollableHeight = Math.max(140, safeAvailableHeight - fixedHeight);
+  const originalMaxHeight = Math.min(originalNaturalHeight, Math.max(96, Math.floor(availableScrollableHeight * 0.34)));
+  const translationMaxHeight = Math.max(120, availableScrollableHeight - originalMaxHeight);
+
+  if (originalNaturalHeight > originalMaxHeight) {
+    panel.original.style.maxHeight = `${originalMaxHeight}px`;
+    panel.original.style.overflow = "auto";
+  }
+
+  if (translationNaturalHeight > translationMaxHeight) {
+    panel.translation.style.maxHeight = `${translationMaxHeight}px`;
+    panel.translation.style.overflow = "auto";
+  }
 }
 
 function cloneRect(rect) {
