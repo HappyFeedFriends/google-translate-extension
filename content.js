@@ -126,7 +126,7 @@ function createPanel() {
   const closeButton = document.createElement("button");
   closeButton.className = "selection-translator-panel__icon-button";
   closeButton.type = "button";
-  closeButton.textContent = "Close";
+  closeButton.textContent = "+";
   closeButton.addEventListener("click", hideAllUi);
 
   heading.append(meta);
