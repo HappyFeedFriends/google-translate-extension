@@ -217,8 +217,9 @@ function handlePointerDown(event) {
     return;
   }
 
+  clearHideTimer();
   closeLanguageMenu();
-  scheduleHideIfNeeded(true);
+  hideAllUi();
 }
 
 function scheduleSelectionSync() {
@@ -230,6 +231,8 @@ function syncSelectionState() {
   const selection = window.getSelection();
 
   if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    quickAction.root.hidden = true;
+
     if (!panel.root.hidden) {
       return;
     }
@@ -457,7 +460,18 @@ async function copyTranslation() {
 
 function handleViewportChange() {
   if (!quickAction.root.hidden) {
-    positionQuickAction();
+    const selection = window.getSelection();
+    if (selection && !selection.isCollapsed && selection.rangeCount > 0) {
+      const rect = getAnchorRect(selection.getRangeAt(0));
+      if (rect && rect.top < window.innerHeight && rect.bottom > 0) {
+        state.selectionRect = rect;
+        positionQuickAction();
+      } else {
+        quickAction.root.hidden = true;
+      }
+    } else {
+      quickAction.root.hidden = true;
+    }
   }
 
   if (!panel.root.hidden) {
