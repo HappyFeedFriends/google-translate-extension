@@ -1,6 +1,7 @@
 const MIN_TEXT_LENGTH = 1;
 const TRIGGER_OFFSET = 12;
 const PANEL_OFFSET = 14;
+const VIEWPORT_PADDING = 8;
 const DEFAULT_THEME = "classic";
 const LANGUAGE_OPTIONS = [
   { value: "ru", label: "Русский" },
@@ -19,7 +20,9 @@ const LANGUAGE_OPTIONS = [
 const state = {
   selectedText: "",
   selectionRect: null,
-  panelAnchorRect: null,
+  anchorRange: null,
+  panelPlacement: "below",
+  panelRepositionPending: false,
   targetLanguage: "ru",
   popupTheme: DEFAULT_THEME,
   requestId: 0,
@@ -32,6 +35,15 @@ const quickAction = createQuickAction();
 const panel = createPanel();
 
 document.documentElement.append(quickAction.root, panel.root);
+
+if (typeof ResizeObserver !== "undefined") {
+  const panelSizeObserver = new ResizeObserver(() => {
+    if (!panel.root.hidden) {
+      schedulePanelReposition();
+    }
+  });
+  panelSizeObserver.observe(panel.card);
+}
 
 init();
 
@@ -294,8 +306,8 @@ function positionQuickAction() {
   root.style.top = "0px";
 
   const bubbleRect = root.getBoundingClientRect();
-  const left = rect.left + window.scrollX + rect.width / 2 - bubbleRect.width / 2;
-  const top = rect.bottom + window.scrollY + TRIGGER_OFFSET;
+  const left = rect.left + rect.width / 2 - bubbleRect.width / 2;
+  const top = rect.bottom + TRIGGER_OFFSET;
 
   root.style.left = `${clampToViewportX(left, bubbleRect.width)}px`;
   root.style.top = `${clampToViewportY(top, bubbleRect.height)}px`;
@@ -324,7 +336,8 @@ function openPanel() {
     return;
   }
 
-  state.panelAnchorRect = cloneRect(state.selectionRect) || state.panelAnchorRect;
+  captureAnchor();
+  state.panelPlacement = "below";
   panel.original.textContent = state.selectedText;
   panel.translation.textContent = "";
   panel.status.textContent = "Переводим...";
@@ -345,59 +358,139 @@ function openPanel() {
 
 function positionPanel() {
   const root = panel.root;
-  const viewportPadding = 8;
+
+  if (root.hidden) {
+    return;
+  }
 
   resetPanelSizeConstraints();
   root.style.left = "0px";
   root.style.top = "0px";
 
-  const selectionRect = state.panelAnchorRect;
+  const anchor = getLiveAnchorViewportRect();
 
-  if (!selectionRect) {
-    const fallbackMaxHeight = window.innerHeight - 24 - viewportPadding * 2;
+  if (!anchor) {
+    const fallbackMaxHeight = window.innerHeight - 24 - VIEWPORT_PADDING * 2;
     applyPanelSizeConstraints(fallbackMaxHeight);
     const fallbackRect = root.getBoundingClientRect();
-    const fallbackLeft = window.scrollX + window.innerWidth / 2 - fallbackRect.width / 2;
-    const fallbackTop = window.scrollY + window.innerHeight - fallbackRect.height - 24;
+    const fallbackLeft = (window.innerWidth - fallbackRect.width) / 2;
+    const fallbackTop = window.innerHeight - fallbackRect.height - 24;
     root.style.left = `${clampToViewportX(fallbackLeft, fallbackRect.width)}px`;
     root.style.top = `${clampToViewportY(fallbackTop, fallbackRect.height)}px`;
     return;
   }
 
   let panelRect = root.getBoundingClientRect();
-  const desiredLeft = selectionRect.left + window.scrollX + selectionRect.width / 2 - panelRect.width / 2;
-  const spaceAbove = selectionRect.top - viewportPadding;
-  const spaceBelow = window.innerHeight - selectionRect.bottom - viewportPadding;
-  const fitsAbove = spaceAbove >= panelRect.height + PANEL_OFFSET;
-  const fitsBelow = spaceBelow >= panelRect.height + PANEL_OFFSET + 48;
 
-  let desiredTop;
-
-  if (fitsAbove || (!fitsBelow && spaceAbove > spaceBelow)) {
-    desiredTop = selectionRect.top + window.scrollY - panelRect.height - PANEL_OFFSET;
-  } else {
-    desiredTop = selectionRect.bottom + window.scrollY + PANEL_OFFSET + 48;
-  }
-
-  const availableHeight = fitsAbove || (!fitsBelow && spaceAbove > spaceBelow)
-    ? spaceAbove - PANEL_OFFSET
-    : spaceBelow - PANEL_OFFSET - 48;
+  const { placement, availableHeight } = choosePanelPlacement(anchor, panelRect.height);
+  state.panelPlacement = placement;
 
   applyPanelSizeConstraints(availableHeight);
   panelRect = root.getBoundingClientRect();
 
-  if (fitsAbove || (!fitsBelow && spaceAbove > spaceBelow)) {
-    desiredTop = selectionRect.top + window.scrollY - panelRect.height - PANEL_OFFSET;
-  } else {
-    desiredTop = selectionRect.bottom + window.scrollY + PANEL_OFFSET + 48;
-  }
+  const top = placement === "above"
+    ? anchor.top - panelRect.height - PANEL_OFFSET
+    : anchor.bottom + PANEL_OFFSET;
 
-  root.style.left = `${clampToViewportX(desiredLeft, panelRect.width)}px`;
-  root.style.top = `${clampToViewportY(desiredTop, panelRect.height)}px`;
+  const center = anchor.left + anchor.width / 2;
+  const left = center - panelRect.width / 2;
+
+  root.style.left = `${clampToViewportX(left, panelRect.width)}px`;
+  root.style.top = `${clampToViewportY(top, panelRect.height)}px`;
 
   if (state.isLanguageMenuOpen) {
     positionLanguageMenu();
   }
+}
+
+function captureAnchor() {
+  const selection = window.getSelection();
+  let capturedRange = null;
+
+  if (selection && selection.rangeCount > 0 && !selection.isCollapsed) {
+    try {
+      capturedRange = selection.getRangeAt(0).cloneRange();
+    } catch (_error) {
+      capturedRange = null;
+    }
+  }
+
+  state.anchorRange = capturedRange;
+}
+
+function rectFromRange(range) {
+  try {
+    const rects = Array.from(range.getClientRects()).filter((rect) => rect.width || rect.height);
+    if (rects.length > 0) {
+      return rects[rects.length - 1];
+    }
+    const rect = range.getBoundingClientRect();
+    return rect.width || rect.height ? rect : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function getLiveAnchorViewportRect() {
+  if (!state.anchorRange) {
+    return null;
+  }
+
+  return rectFromRange(state.anchorRange);
+}
+
+function isAnchorOutsideViewport(anchor) {
+  if (!anchor) {
+    return false;
+  }
+
+  return anchor.bottom <= 0 || anchor.top >= window.innerHeight;
+}
+
+function choosePanelPlacement(anchorViewportRect, panelHeight) {
+  const viewportHeight = window.innerHeight;
+  const spaceAbove = Math.max(0, anchorViewportRect.top - VIEWPORT_PADDING);
+  const spaceBelow = Math.max(0, viewportHeight - anchorViewportRect.bottom - VIEWPORT_PADDING);
+  const required = panelHeight + PANEL_OFFSET;
+  const fitsAbove = spaceAbove >= required;
+  const fitsBelow = spaceBelow >= required;
+  const previous = state.panelPlacement;
+
+  let placement;
+
+  if (fitsBelow && fitsAbove) {
+    // Both sides fit: keep the previous choice to avoid jitter on scroll.
+    placement = previous === "above" ? "above" : "below";
+  } else if (fitsBelow) {
+    placement = "below";
+  } else if (fitsAbove) {
+    placement = "above";
+  } else {
+    // Neither side fits fully — go with whichever has more room so the panel
+    // stays as visible as possible after the size constraint is applied.
+    placement = spaceAbove > spaceBelow ? "above" : "below";
+  }
+
+  const availableHeight = placement === "above"
+    ? spaceAbove - PANEL_OFFSET
+    : spaceBelow - PANEL_OFFSET;
+
+  return { placement, availableHeight };
+}
+
+function schedulePanelReposition() {
+  if (state.panelRepositionPending) {
+    return;
+  }
+
+  state.panelRepositionPending = true;
+  window.requestAnimationFrame(() => {
+    state.panelRepositionPending = false;
+
+    if (!panel.root.hidden) {
+      positionPanel();
+    }
+  });
 }
 
 async function requestTranslation() {
@@ -475,7 +568,13 @@ function handleViewportChange() {
   }
 
   if (!panel.root.hidden) {
-    positionPanel();
+    const anchor = getLiveAnchorViewportRect();
+
+    if (state.anchorRange && isAnchorOutsideViewport(anchor)) {
+      hideAllUi();
+    } else {
+      schedulePanelReposition();
+    }
   }
 }
 
@@ -506,7 +605,8 @@ function clearHideTimer() {
 function hideAllUi() {
   state.selectedText = "";
   state.selectionRect = null;
-  state.panelAnchorRect = null;
+  state.anchorRange = null;
+  state.panelPlacement = "below";
   state.requestId += 1;
   closeLanguageMenu();
   quickAction.root.hidden = true;
@@ -633,29 +733,14 @@ function applyPanelSizeConstraints(availableHeight) {
   }
 }
 
-function cloneRect(rect) {
-  if (!rect) {
-    return null;
-  }
-
-  return {
-    top: rect.top,
-    right: rect.right,
-    bottom: rect.bottom,
-    left: rect.left,
-    width: rect.width,
-    height: rect.height
-  };
-}
-
 function clampToViewportX(left, width) {
-  const min = window.scrollX + 8;
-  const max = window.scrollX + window.innerWidth - width - 8;
+  const min = VIEWPORT_PADDING;
+  const max = window.innerWidth - width - VIEWPORT_PADDING;
   return Math.min(Math.max(left, min), Math.max(min, max));
 }
 
 function clampToViewportY(top, height) {
-  const min = window.scrollY + 8;
-  const max = window.scrollY + window.innerHeight - height - 8;
+  const min = VIEWPORT_PADDING;
+  const max = window.innerHeight - height - VIEWPORT_PADDING;
   return Math.min(Math.max(top, min), Math.max(min, max));
 }
