@@ -565,20 +565,34 @@ async function selectTargetLanguage(value) {
 }
 
 function positionLanguageMenu() {
-  panel.languageMenu.style.left = "0px";
-  panel.languageMenu.style.top = "0px";
+  const menu = panel.languageMenu;
+  const viewportPadding = 8;
+  const gap = 6;
 
-  const rootRect = panel.root.getBoundingClientRect();
+  menu.style.left = "0px";
+  menu.style.top = "0px";
+  menu.style.maxHeight = `${window.innerHeight - viewportPadding * 2}px`;
+
   const triggerRect = panel.language.getBoundingClientRect();
-  const menuRect = panel.languageMenu.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
 
-  const desiredLeft = triggerRect.left - rootRect.left;
-  const desiredTop = triggerRect.bottom - rootRect.top + 8;
-  const maxLeft = Math.max(8, rootRect.width - menuRect.width - 8);
-  const left = Math.min(Math.max(desiredLeft, 8), maxLeft);
+  const spaceBelow = window.innerHeight - triggerRect.bottom - viewportPadding;
+  const spaceAbove = triggerRect.top - viewportPadding;
+  const placeAbove = menuRect.height + gap > spaceBelow && spaceAbove > spaceBelow;
 
-  panel.languageMenu.style.left = `${left}px`;
-  panel.languageMenu.style.top = `${desiredTop}px`;
+  let top = placeAbove
+    ? triggerRect.top - menuRect.height - gap
+    : triggerRect.bottom + gap;
+
+  const maxTop = window.innerHeight - menuRect.height - viewportPadding;
+  top = Math.min(Math.max(top, viewportPadding), Math.max(viewportPadding, maxTop));
+
+  let left = triggerRect.left;
+  const maxLeft = window.innerWidth - menuRect.width - viewportPadding;
+  left = Math.min(Math.max(left, viewportPadding), Math.max(viewportPadding, maxLeft));
+
+  menu.style.left = `${left}px`;
+  menu.style.top = `${top}px`;
 }
 
 function resetPanelSizeConstraints() {

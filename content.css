@@ -6,7 +6,8 @@
 }
 
 .selection-translator-trigger[hidden],
-.selection-translator-panel[hidden] {
+.selection-translator-panel[hidden],
+.selection-translator-panel__language-menu[hidden] {
   display: none !important;
 }
 
@@ -99,8 +100,8 @@
 }
 
 .selection-translator-panel__language-menu {
-  position: absolute;
-  z-index: 2;
+  position: fixed;
+  z-index: 2147483647;
   display: grid;
   gap: 4px;
   padding: 8px;
@@ -109,6 +110,8 @@
   background: rgba(255, 255, 255, 0.94);
   box-shadow: 0 12px 30px rgba(15, 23, 42, 0.12);
   min-width: 180px;
+  max-height: calc(100vh - 24px);
+  overflow-y: auto;
   backdrop-filter: blur(12px);
 }
 
